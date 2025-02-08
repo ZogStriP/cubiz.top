@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width">
+<link rel=canonical href=https://cubiz.top>
+<link rel=manifest href=/manifest.json>
+<style>
+:root { font-family: monospace; color-scheme: dark; --accent: darkorange }
+a { color: var(--accent); text-decoration: none }
+</style>
+<script>
+navigator.serviceWorker.register('/sw.js');
+
+document.addEventListener("keypress", async ({ key }) => {
+  if (key === " " || key === "Enter") {
+    const device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "GAN" }] });
+    console.log(device);
+  }
+});
+
+window.onload = async () => {
+  const devices = await navigator.bluetooth.getDevices();
+  devices && devices.length > 0 && console.log(devices[0]);
+}
+</script>
+<title>cubiz.top</title>
+<h1>cubiz.top</h1>
