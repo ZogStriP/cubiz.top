@@ -8,19 +8,62 @@
 a { color: var(--accent); text-decoration: none }
 </style>
 <script>
+const GAN_CIC = 1; // Company Code Identifier
+const GAN_GEN2_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dc4179";
+const GAN_GEN2_CHARACTERISTIC_COMMAND = "28be4a4a-cd67-11e9-a32f-2a2ae2dbcce4";
+const GAN_GEN2_CHARACTERISTIC_STATE = "28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4";
+const GAN_ENCRYPTION_KEY = [0x01, 0x02, 0x42, 0x28, 0x31, 0x91, 0x16, 0x07, 0x20, 0x05, 0x18, 0x54, 0x42, 0x11, 0x12, 0x53];
+const GAN_ENCRYPTION_IV = [0x11, 0x03, 0x32, 0x28, 0x21, 0x01, 0x76, 0x27, 0x20, 0x95, 0x78, 0x14, 0x32, 0x12, 0x02, 0x43];
+
+let device, server, command, state;
+let salt, key, iv;
+
 navigator.serviceWorker.register('/sw.js');
 
-document.addEventListener("keypress", async ({ key }) => {
-  if (key === " " || key === "Enter") {
-    const device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "GAN" }] });
-    console.log(device);
-  }
-});
+async function connectToDevice() {
+  device = await navigator.bluetooth.requestDevice({ 
+    filters: [{ namePrefix: "GAN" }],
+    optionalServices: [GAN_GEN2_SERVICE],
+    optionalManufacturerData: [GAN_CIC],
+  });
 
-window.onload = async () => {
-  const devices = await navigator.bluetooth.getDevices();
-  devices && devices.length > 0 && console.log(devices[0]);
+  device.addEventListener('advertisementreceived', ({ manufacturerData }) => {
+    // TODO: salt might be in reverse order
+    salt = new Uint8Array(manufacturerData.get(GAN_CIC).buffer, 3, 6);
+    key = new Uint8Array(GAN_ENCRYPTION_KEY);
+    iv = new Uint8Array(GAN_ENCRYPTION_IV);
+    for (let i = 0; i < 6; i++) {
+      key[i] = (key[i] + salt[i]) % 0xFF;
+      iv[i] = (iv[i] + salt[i]) % 0xFF;
+    }
+  }, { once: true });
+
+  await device.watchAdvertisements();
+
+  // TODO: handle disconnection
+  // device.addEventListener('gattserverdisconnected', () => console.log('gattserverdisconnected'));
+
+  server = await device.gatt.connect();
+
+  const [service, _] = await server.getPrimaryServices();
+
+  command = await service.getCharacteristic(GAN_GEN2_CHARACTERISTIC_COMMAND);
+  console.log(command);
+
+  state = await service.getCharacteristic(GAN_GEN2_CHARACTERISTIC_STATE);
+  console.log(state);
+
+  state.addEventListener('characteristicvaluechanged', (event) => {
+    const value = event.target.value;
+    // TODO: find a way to encrypt/decrypt the command and state using Web Crypto API (encrypt() with "AES-CBC")
+    // window.crypto.subtle.encrypt({ name: "AES-CBC", iv: iv }, key, encoded);
+  });
+
+  await state.startNotifications();
 }
+
+document.addEventListener("keypress", ({ key }) => (key === " " || key === "Enter") && connectToDevice());
+document.addEventListener("click", () => connectToDevice());
 </script>
 <title>cubiz.top</title>
 <h1>cubiz.top</h1>
