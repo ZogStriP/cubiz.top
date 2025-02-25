@@ -11,14 +11,35 @@ a { color: var(--accent); text-decoration: none }
 const GAN_CIC = 1; // Company Code Identifier
 const GAN_GEN2_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dc4179";
 const GAN_GEN2_CHARACTERISTIC_COMMAND = "28be4a4a-cd67-11e9-a32f-2a2ae2dbcce4";
-const GAN_GEN2_CHARACTERISTIC_STATE = "28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4";
+const GAN_GEN2_CHARACTERISTIC_STATE   = "28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4";
 const GAN_ENCRYPTION_KEY = [0x01, 0x02, 0x42, 0x28, 0x31, 0x91, 0x16, 0x07, 0x20, 0x05, 0x18, 0x54, 0x42, 0x11, 0x12, 0x53];
-const GAN_ENCRYPTION_IV = [0x11, 0x03, 0x32, 0x28, 0x21, 0x01, 0x76, 0x27, 0x20, 0x95, 0x78, 0x14, 0x32, 0x12, 0x02, 0x43];
+const GAN_ENCRYPTION_IV  = [0x11, 0x03, 0x32, 0x28, 0x21, 0x01, 0x76, 0x27, 0x20, 0x95, 0x78, 0x14, 0x32, 0x12, 0x02, 0x43];
 
-let device, server, command, state;
-let salt, key, iv;
+let device, server, command, state, cryptoKey;
 
-navigator.serviceWorker.register('/sw.js');
+const salt = [0xAB, 0x12, 0x34, 0x62, 0x83, 0xD7];
+const key  = new Uint8Array(GAN_ENCRYPTION_KEY);
+const iv   = new Uint8Array(GAN_ENCRYPTION_IV);
+
+for (let i = 0; i < 6; i++) {
+  key[i] = (key[i] + salt[5 - i]) % 0xFF;
+   iv[i] = ( iv[i] + salt[5 - i]) % 0xFF;
+}
+
+navigator.serviceWorker.register("/sw.js");
+
+async function decryptChunk(buffer, offset) {
+  try {
+    console.log("buffer", buffer, "offset", offset);
+    const slice = buffer.slice(offset, offset + 16);
+    console.log("buffer", buffer, "offset", offset, "slice", slice);
+    const chunk = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, cryptoKey, slice);
+    console.log("buffer", buffer, "offset", offset, "slice", slice, "chunk", chunk);
+    buffer.set(new Uint8Array(chunk), offset);
+  } catch (e) {
+    console.log("buffer", buffer, "offset", offset, "e", e);
+  }
+}
 
 async function connectToDevice() {
   device = await navigator.bluetooth.requestDevice({ 
@@ -27,36 +48,41 @@ async function connectToDevice() {
     optionalManufacturerData: [GAN_CIC],
   });
 
-  device.addEventListener('advertisementreceived', ({ manufacturerData }) => {
-    // TODO: salt might be in reverse order
-    salt = new Uint8Array(manufacturerData.get(GAN_CIC).buffer, 3, 6);
-    key = new Uint8Array(GAN_ENCRYPTION_KEY);
-    iv = new Uint8Array(GAN_ENCRYPTION_IV);
-    for (let i = 0; i < 6; i++) {
-      key[i] = (key[i] + salt[i]) % 0xFF;
-      iv[i] = (iv[i] + salt[i]) % 0xFF;
-    }
-  }, { once: true });
+  // device.addEventListener("advertisementreceived", async ({ manufacturerData }) => {
+  //   const salt = new Uint8Array(manufacturerData.get(GAN_CIC).buffer, 3, 6);
+  //   key = new Uint8Array(GAN_ENCRYPTION_KEY);
+  //   iv = new Uint8Array(GAN_ENCRYPTION_IV);
+  //   for (let i = 0; i < 6; i++) {
+  //     key[i] = (key[i] + salt[i]) % 0xFF;
+  //     iv[i] = (iv[i] + salt[i]) % 0xFF;
+  //   }
+  // }, { once: true });
 
-  await device.watchAdvertisements();
+  // await device.watchAdvertisements();
+
+  cryptoKey = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["encrypt", "decrypt"]);
 
   // TODO: handle disconnection
-  // device.addEventListener('gattserverdisconnected', () => console.log('gattserverdisconnected'));
+  // device.addEventListener("gattserverdisconnected", () => console.log("gattserverdisconnected"));
 
   server = await device.gatt.connect();
 
   const [service, _] = await server.getPrimaryServices();
 
   command = await service.getCharacteristic(GAN_GEN2_CHARACTERISTIC_COMMAND);
-  console.log(command);
+  console.log("command", command);
 
   state = await service.getCharacteristic(GAN_GEN2_CHARACTERISTIC_STATE);
-  console.log(state);
+  console.log("state", state);
 
-  state.addEventListener('characteristicvaluechanged', (event) => {
+  state.addEventListener("characteristicvaluechanged", async (event) => {
     const value = event.target.value;
-    // TODO: find a way to encrypt/decrypt the command and state using Web Crypto API (encrypt() with "AES-CBC")
-    // window.crypto.subtle.encrypt({ name: "AES-CBC", iv: iv }, key, encoded);
+
+    if (value.byteLength < 16) return;
+
+    let d = new Uint8Array(value.buffer);
+    // if (d.length > 16) { await decryptChunk(d, d.length - 16); }
+    await decryptChunk(d, 0);
   });
 
   await state.startNotifications();
