@@ -23,39 +23,34 @@ const GAN_ENCRYPTION_IV  = [0x11, 0x03, 0x32, 0x28, 0x21, 0x01, 0x76, 0x27, 0x20
 let device, server, service, command, state, mac, key, iv;
 let hardware, software, name, gyro, battery;
 
-requestFacelets = async () => await send(0x04);
-requestHardwareInfo = async () => await send(0x05);
-requestBattery = async () => await send(0x09);
-
-async function send(cmd) {
+send = async (cmd) => {
   const data = new Uint8Array(20).fill(0);
   data[0] = cmd;
   await command.writeValue(encrypt(data));
 }
 
-function encrypt(data) {
+requestFacelets = async () => await send(0x04);
+requestHardwareInfo = async () => await send(0x05);
+requestBattery = async () => await send(0x09);
+
+encryptChunk = (buffer, offset = 0) => buffer.set(new ModeOfOperation.cbc(key, iv).encrypt(buffer.slice(offset, offset + 16)), offset);
+decryptChunk = (buffer, offset = 0) => buffer.set(new ModeOfOperation.cbc(key, iv).decrypt(buffer.slice(offset, offset + 16)), offset);
+
+encrypt = (data) => {
   let d = new Uint8Array(data);
   encryptChunk(d);
   d.length > 16 && encryptChunk(d, d.length - 16);
   return d;
 }
 
-function decrypt(data) {
+decrypt = (data) => {
   let d = new Uint8Array(data);
   d.length > 16 && decryptChunk(d, d.length - 16);
   decryptChunk(d);
   return d;
 }
 
-function encryptChunk(buffer, offset = 0) {
-  buffer.set(new ModeOfOperation.cbc(key, iv).encrypt(buffer.slice(offset, offset + 16)), offset);
-}
-
-function decryptChunk(buffer, offset = 0) {
-  buffer.set(new ModeOfOperation.cbc(key, iv).decrypt(buffer.slice(offset, offset + 16)), offset);
-}
-
-function parse(data) {
+parse = (data) => {
   const bytes = new Uint8Array(data);
   const mode = bytes[0] >> 4;
 
