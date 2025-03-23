@@ -24,14 +24,14 @@ let device, server, service, command, state, mac, key, iv;
 let hardware, software, name, gyro, battery;
 
 send = async (cmd) => {
-  const data = new Uint8Array(20).fill(0);
+  const data = new Uint8Array(20);
   data[0] = cmd;
   await command.writeValue(encrypt(data));
 }
 
-requestFacelets = async () => await send(0x04);
+requestFacelets     = async () => await send(0x04);
 requestHardwareInfo = async () => await send(0x05);
-requestBattery = async () => await send(0x09);
+requestBattery      = async () => await send(0x09);
 
 encryptChunk = (buffer, offset = 0) => buffer.set(new ModeOfOperation.cbc(key, iv).encrypt(buffer.slice(offset, offset + 16)), offset);
 decryptChunk = (buffer, offset = 0) => buffer.set(new ModeOfOperation.cbc(key, iv).decrypt(buffer.slice(offset, offset + 16)), offset);
@@ -103,10 +103,10 @@ document.addEventListener("click", async () => {
 
   await device.watchAdvertisements();
 
-  server = await device.gatt.connect();
+  server  = await device.gatt.connect();
   service = await server.getPrimaryService(GAN_GEN2_SERVICE);
   command = await service.getCharacteristic(GAN_GEN2_CHARACTERISTIC_COMMAND);
-  state = await service.getCharacteristic(GAN_GEN2_CHARACTERISTIC_STATE);
+  state   = await service.getCharacteristic(GAN_GEN2_CHARACTERISTIC_STATE);
 
   state.addEventListener("characteristicvaluechanged", ({ target }) => parse(decrypt(target.value.buffer)));
 
