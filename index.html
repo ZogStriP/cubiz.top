@@ -23,6 +23,8 @@ const GAN_ENCRYPTION_IV  = [0x11, 0x03, 0x32, 0x28, 0x21, 0x01, 0x76, 0x27, 0x20
 let device, server, service, command, state, mac, key, iv;
 let hardware, software, name, gyro, battery;
 
+now = () => Math.floor(performance.now());
+
 send = async (cmd) => {
   const data = new Uint8Array(20);
   data[0] = cmd;
@@ -51,11 +53,13 @@ decrypt = (data) => {
 }
 
 parse = (data) => {
+  const ts = now();
   const bytes = new Uint8Array(data);
   const mode = bytes[0] >> 4;
 
   switch (mode) {
     case 0x01: // gyro
+      console.log("Gyro!");
       break;
     case 0x02: // move
       console.log("Move!");
