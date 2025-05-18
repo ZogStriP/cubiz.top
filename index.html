@@ -3,7 +3,7 @@
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width">
 <meta name=view-transition content=same-origin>
-<meta name=description content="Learn speedcubing with your bluetooth Rubik's Cube">
+<meta name=theme-color content=#000>
 <link rel=canonical href=https://cubiz.top>
 <link rel=manifest href=/manifest.json>
 <style>
@@ -11,117 +11,7 @@
 a { color: var(--accent); text-decoration: none }
 @view-transition { navigation: auto }
 </style>
-<script src=https://unpkg.com/aes-js@3.1.2/index.js></script>
 <script>
-const { ModeOfOperation } = aesjs;
-
-const GAN_CIC = 1; // Company Code Identifier
-const GAN_GEN2_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dc4179";
-const GAN_GEN2_CHARACTERISTIC_COMMAND = "28be4a4a-cd67-11e9-a32f-2a2ae2dbcce4";
-const GAN_GEN2_CHARACTERISTIC_STATE   = "28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4";
-const GAN_ENCRYPTION_KEY = [0x01, 0x02, 0x42, 0x28, 0x31, 0x91, 0x16, 0x07, 0x20, 0x05, 0x18, 0x54, 0x42, 0x11, 0x12, 0x53];
-const GAN_ENCRYPTION_IV  = [0x11, 0x03, 0x32, 0x28, 0x21, 0x01, 0x76, 0x27, 0x20, 0x95, 0x78, 0x14, 0x32, 0x12, 0x02, 0x43];
-
-let device, server, service, command, state, mac, key, iv;
-let hardware, software, name, gyro, battery;
-
-now = () => Math.floor(performance.now());
-
-send = async (cmd) => {
-  const data = new Uint8Array(20);
-  data[0] = cmd;
-  await command.writeValue(encrypt(data));
-}
-
-requestFacelets     = async () => await send(0x04);
-requestHardwareInfo = async () => await send(0x05);
-requestBattery      = async () => await send(0x09);
-
-encryptChunk = (buffer, offset = 0) => buffer.set(new ModeOfOperation.cbc(key, iv).encrypt(buffer.slice(offset, offset + 16)), offset);
-decryptChunk = (buffer, offset = 0) => buffer.set(new ModeOfOperation.cbc(key, iv).decrypt(buffer.slice(offset, offset + 16)), offset);
-
-encrypt = (data) => {
-  let d = new Uint8Array(data);
-  encryptChunk(d);
-  d.length > 16 && encryptChunk(d, d.length - 16);
-  return d;
-}
-
-decrypt = (data) => {
-  let d = new Uint8Array(data);
-  d.length > 16 && decryptChunk(d, d.length - 16);
-  decryptChunk(d);
-  return d;
-}
-
-parse = (data) => {
-  const ts = now();
-  const bytes = new Uint8Array(data);
-  const mode = bytes[0] >> 4;
-
-  switch (mode) {
-    case 0x01: // gyro
-      console.log("Gyro!");
-      break;
-    case 0x02: // move
-      console.log("Move!");
-      break;
-    case 0x04: // state / facelets
-      console.log("State!");
-      break;
-    case 0x05: // hardware info
-      hardware = `${bytes[1]}.${bytes[2]}`;
-      software = `${bytes[3]}.${bytes[4]}`;
-      name = new TextDecoder().decode(bytes.slice(5, 13));
-      gyro = !!(bytes[13] >> 7);
-      console.log({ hardware, software, name, gyro });
-      break;
-    case 0x09: // battery
-      battery = bytes[1];
-      console.log({ battery });
-      break;
-    case 0x0D: // disconnect
-      console.log("Disconnected!");
-      break;
-    default:
-      console.log("Unknown mode:", mode);
-      break;
-  }
-}
-
-document.addEventListener("click", async () => {
-  device = await navigator.bluetooth.requestDevice({
-    filters: [{ namePrefix: "GAN" }],
-    optionalServices: [GAN_GEN2_SERVICE],
-    optionalManufacturerData: [GAN_CIC],
-  });
-
-  device.addEventListener("advertisementreceived", ({ manufacturerData }) => {
-    mac = new Uint8Array(manufacturerData.get(GAN_CIC).buffer, 3, 6);
-    key = new Uint8Array(GAN_ENCRYPTION_KEY);
-    iv  = new Uint8Array(GAN_ENCRYPTION_IV);
-
-    for (let i = 0; i < 6; i++) {
-      key[i] = (key[i] + mac[i]) % 0xFF;
-       iv[i] = ( iv[i] + mac[i]) % 0xFF;
-    }
-  }, { once: true });
-
-  await device.watchAdvertisements();
-
-  server  = await device.gatt.connect();
-  service = await server.getPrimaryService(GAN_GEN2_SERVICE);
-  command = await service.getCharacteristic(GAN_GEN2_CHARACTERISTIC_COMMAND);
-  state   = await service.getCharacteristic(GAN_GEN2_CHARACTERISTIC_STATE);
-
-  state.addEventListener("characteristicvaluechanged", ({ target }) => parse(decrypt(target.value.buffer)));
-
-  await state.startNotifications();
-
-  await requestHardwareInfo();
-  await requestFacelets();
-  await requestBattery();
-}, { once: true });
 </script>
 <title>cubiz.top</title>
 <h1>cubiz.top</h1>
